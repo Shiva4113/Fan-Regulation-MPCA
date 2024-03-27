@@ -6,25 +6,29 @@ FAN STATUS -> ON, OFF
 FAN SPEED {0 - 5} -> fan speed [012345]
 
 '''
-from flask import Flask
+from flask import Flask,render_template
 import cv2
 from google.cloud import speech
 
 
 
-app = Flask(__name__)
+app = Flask(__name__,template_folder="./templates")
 
-@app.route('/')
+@app.route('/',methods=['POST','GET'])
 def process():
     
+    # return render_template("index.html")
     return processSpeech()
 
 
-@app.route('/predict')
+@app.route('/predict',methods=['POST','GET'])
 def predict():
     #this will call processSpeech/Image() based on image or speech
     api_url = "something"
     #here i will either capture image or detect speech
+
+    #make a condition check to see if i got a mp3 file or an img -> based on that, give either the processed speech or the processed image caption
+    return processSpeech()
 
 def processImage():
     #i will send prompt and receive response  -> train a model, pickle load the model.pkl
