@@ -4,10 +4,11 @@ SPEECH:
 
 FAN STATUS -> ON, OFF
 FAN SPEED {0 - 5} -> fan speed [012345]
+https://www.youtube.com/watch?v=DtlJH6MgBso
 
 '''
 from flask import Flask
-import cv2
+# import cv2
 from google.cloud import speech
 
 

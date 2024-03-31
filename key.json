@@ -1,0 +1,40 @@
+
+var socket = io.connect('http://' + document.domain + ':' + location.port);
+
+
+function startRecording() {
+    // Use getUserMedia API to access user's microphone
+    navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+            // Initialize MediaRecorder to record audio stream
+            var mediaRecorder = new MediaRecorder(stream);
+            
+            // Array to store audio data chunks
+            var chunks = [];
+            
+            // Event handler for when data is available
+            mediaRecorder.ondataavailable = function(event) {
+                chunks.push(event.data);
+            }
+            
+            // Event handler for when recording is stopped
+            mediaRecorder.onstop = function() {
+                // Convert audio data chunks to a single Blob
+                var audioBlob = new Blob(chunks, { 'type' : 'audio/ogg; codecs=opus' });
+                
+                // Send audio data to Flask server via WebSocket
+                socket.emit('audio', audioBlob);
+            }
+            
+            // Start recording
+            mediaRecorder.start();
+            
+            // Stop recording after 5 seconds (adjust as needed)
+            setTimeout(function() {
+                mediaRecorder.stop();
+            }, 5000);
+        })
+        .catch(function(err) {
+            console.log('Error accessing microphone:', err);
+        });
+}
