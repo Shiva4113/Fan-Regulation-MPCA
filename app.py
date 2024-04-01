@@ -14,11 +14,11 @@ from google.cloud import speech
 
 app = Flask(__name__,template_folder="./templates")
 
-@app.route('/',methods=['POST','GET'])
+@app.route('/')
 def process():
     
-    # return render_template("index.html")
-    return processSpeech()
+    return render_template("index.html")
+    # return processSpeech()
 
 
 @app.route('/predict',methods=['POST','GET'])
@@ -100,9 +100,9 @@ def cmdHelper(final):
 
 def processSpeech():
     clientSpeech = speech.SpeechClient.from_service_account_file('key.json')
-    numbers_file = "./sample/ljiv5.mp3"
+    inputAudio = "./sample/ljiv5.mp3"
     
-    with open(numbers_file,'rb') as file:
+    with open(inputAudio,'rb') as file:
         data = file.read()
     
     audio_file = speech.RecognitionAudio(content=data)
