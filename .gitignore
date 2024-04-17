@@ -1,2 +1,5 @@
 __pycache__
 key.json
+.env
+sample
+myEnv

@@ -13,8 +13,9 @@
             margin: 0;
             background-color: #f0f0f0;
             font-family: Arial, sans-serif;
+            
         }
-
+       
         button {
             background-color: #4CAF50; /* Green */
             border: none;
@@ -28,15 +29,156 @@
             cursor: pointer;
             border-radius: 12px;
             transition-duration: 0.4s;
+            max-width:200px;
         }
+        .container {
+           display: flex;
+           flex-direction: column;
+           align-items: center;
+           gap: 10px; 
+        }
+
 
         button:hover {
             background-color: #45a049;
         }
+        #transcript {
+           width: 100%; 
+           text-align:top; 
+           margin-top: 20px; 
+        }
+        #video {
+           width: 320px; 
+           height: 240px; 
+           margin-top: 20px; 
+           align-items:top;
+        }
+
     </style>
 </head>
 <body>
-    <button>Microphone</button>
-    <button>Camera</button>
+    <button id="microphoneButton">Microphone</button>
+    <!-- <button id="startCamera">Camera</button> -->
+    <video id="video" autoplay></video>
+    <button id="captureButton">Click</button>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <!-- <img id="photo" alt="The screen capture will appear in this box." /> -->
+    
+    <script>
+
+        var video = document.getElementById('video');
+        var canvas = document.getElementById('canvas');
+        var context = canvas.getContext('2d');
+        var captureButton = document.getElementById('captureButton');
+        var photo = document.getElementById('photo');
+        var microphoneButton = document.getElementById('microphoneButton');
+        var mediaRecorder;
+        var chunks = [];
+        var isRecording = false;
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+           .then(function(stream) {
+               video.srcObject = stream;
+            })
+            .catch(function(err) {
+               console.log("An error occurred: " + err);
+            });
+
+        captureButton.addEventListener('click', function() {
+            var context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, 320, 240);
+            var imageData = canvas.toDataURL('image/jpeg');
+            imageData = imageData.slice(23);
+            var data = {
+                imageData: imageData
+            };
+
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (xhr.status === 200) {
+                        console.log('Image saved successfully on the backend.');
+                        console.log('Response from backend:', xhr.responseText);
+                    } else {
+                        console.error('Failed to save image on the backend.');
+                    }
+                }
+            };
+            xhr.open('POST', '/predictimage', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify(data));
+        });
+
+        microphoneButton.addEventListener('click', function() {
+            if (!isRecording) {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        });
+
+        function startRecording() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(function(stream) {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.start();
+                    isRecording = true;
+                    microphoneButton.textContent = "Stop Recording";
+
+                    mediaRecorder.ondataavailable = function(e) {
+                        chunks.push(e.data);
+                    };
+
+                    mediaRecorder.onstop = function(e) {
+            var blob = new Blob(chunks, { 'type' : 'audio/mpeg' }); // Changed to 'audio/mpeg' for MP3
+            chunks = [];
+            var audioURL = window.URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = audioURL;
+            console.log(audioURL);
+            a.download = 'recorded_audio.mp3'; // Changed file extension to .mp3
+            a.click();
+
+            // Convert blob to Base64
+            var reader = new FileReader();
+            reader.onloadend = function() {
+                var base64String = reader.result;
+                console.log('Base64 String:', base64String);
+                // If you want to remove the data URL prefix
+                var base64Data = base64String.split(',')[1];
+                console.log('Base64 Data:', base64Data);
+            };
+            reader.readAsDataURL(blob);
+        };
+
+                })
+                .catch(function(err) {
+                    console.log("An error occurred: " + err);
+                });
+        }
+
+        function stopRecording() {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                isRecording = false;
+                microphoneButton.textContent = "Start Recording";
+            }
+            var xhr = new XMLHttpRequest();
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === XMLHttpRequest.DONE) {
+                    if (xhr.status === 200) {
+                        console.log('Image saved successfully on the backend.');
+                        console.log('Response from backend:', xhr.responseText);
+                    } else {
+                        console.error('Failed to save image on the backend.');
+                    }
+                }
+            };
+            xhr.open('POST', '/predictaudio', true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify(data));
+        }
+
+    </script>
 </body>
 </html>
