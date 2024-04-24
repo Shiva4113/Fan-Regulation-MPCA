@@ -17,19 +17,24 @@ import base64
 import time
 from dotenv import load_dotenv, dotenv_values
 import google.generativeai as genai
+from flask_cors import CORS
+
 
 app = Flask(__name__,template_folder="./templates")
-
+CORS(app)
 
 generation_config = None
 safety_settings = None
 modelVision = None
 modelText = None
 
+
+
 #ENVIRONMENT VARIABLES
 load_dotenv()
 env_var = dotenv_values(".env")
 geminiApiKey = env_var.get("GEMINI_API_KEY")
+
 
 #GEMINI-SETUP
 def setGemini():
@@ -73,7 +78,23 @@ def setGemini():
 
 setGemini()
 
-
+def sendVals(speed):
+    # Define the value you want to write to the file
+    value_to_write = str(speed)
+    
+    # Define the file path where you want to write the value
+    file_path = "arduino_command.txt"
+    
+    # Check if the file exists, if not, create it
+    if not os.path.exists(file_path):
+        with open(file_path, 'w') as file:
+            file.write(value_to_write)
+    else:
+        # If the file exists, append the value to the end of the file
+        with open(file_path, 'a') as file:
+            file.write(value_to_write + '\n')
+    
+    # print(f"Value '{value_to_write}' written to {file_path}")
 
 @app.route('/')
 def process():
@@ -82,6 +103,7 @@ def process():
 
 @app.route('/predictimage', methods = ["POST"])
 def process_image():
+    
     if request.method == 'POST':
         data = request.json
         imgData = data.get("imageData","")
@@ -100,7 +122,9 @@ def process_image():
     responseGen = modelVision.generate_content(prompt)
     # time.sleep(5)
     # os.remove('./image.jpg')
-
+    value = responseGen.text
+    sendVals(value)
+    os.system('python fan.py')
     return jsonify({"repsonse":int(responseGen.text.lstrip().rstrip())}),200
 
     #here i will send the response to the arduino as a request and also try and render the response on the frontend
@@ -118,10 +142,11 @@ def predict():
     return processSpeech(audioData)
 
 def processSpeech(audioData):
+    
     clientSpeech = speech.SpeechClient.from_service_account_file('key.json')
     inputAudio = audioData
     decoded_content = base64.b64decode(inputAudio)
-
+    print(decoded_content)
     with open('./decodedAudio.webm','wb') as audioFile:
         audioFile.write(decoded_content)
     # with open(inputAudio,'rb') as file:
@@ -171,7 +196,10 @@ def processSpeech(audioData):
                                              fan speed 3 : 3
                                              fan speed 4 : 4
                                              fan speed 5 : 5''')
-    
+    value = int(responseGen.text)
+    print(value)
+    sendVals(value)
+    os.system('python fan.py')
     return jsonify({"response":int(responseGen.text),
                     "transcripts":transcripts}),200
 
@@ -179,4 +207,4 @@ def processSpeech(audioData):
     return transcripts
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True,host="0.0.0.0")
