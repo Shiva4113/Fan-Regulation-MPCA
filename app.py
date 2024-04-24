@@ -7,100 +7,157 @@ FAN SPEED {0 - 5} -> fan speed [012345]
 https://www.youtube.com/watch?v=DtlJH6MgBso
 
 '''
-from flask import Flask
-# import cv2
+#IMPORTS
+from flask import Flask,render_template,request,jsonify
+import cv2
 from google.cloud import speech
+import os
+import io
+from PIL import Image
+import base64
+import time
+from dotenv import load_dotenv, dotenv_values
+import google.generativeai as genai
+from flask_cors import CORS
+
+
+app = Flask(__name__,template_folder="./templates")
+CORS(app)
+
+generation_config = None
+safety_settings = None
+modelVision = None
+modelText = None
 
 
 
-app = Flask(__name__)
+#ENVIRONMENT VARIABLES
+load_dotenv()
+env_var = dotenv_values(".env")
+geminiApiKey = env_var.get("GEMINI_API_KEY")
+
+
+#GEMINI-SETUP
+def setGemini():
+    global generation_config,safety_settings, modelVision, modelText
+    genai.configure(api_key=geminiApiKey)
+
+    generation_config = {
+    "temperature": 0.9,
+    "top_p": 1,
+    "top_k": 1,
+    "max_output_tokens": 2048,
+    }
+
+    safety_settings = [
+    {
+        "category": "HARM_CATEGORY_HARASSMENT",
+        "threshold": "BLOCK_NONE"
+    },
+    {
+        "category": "HARM_CATEGORY_HATE_SPEECH",
+        "threshold": "BLOCK_NONE"
+    },
+    {
+        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        "threshold": "BLOCK_NONE"
+    },
+    {
+        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+        "threshold": "BLOCK_NONE"
+    },
+    ]
+
+    modelVision = genai.GenerativeModel(model_name="gemini-pro-vision",
+                                generation_config=generation_config,
+                                safety_settings=safety_settings)
+
+    modelText = genai.GenerativeModel(model_name="gemini-1.0-pro",
+                                generation_config=generation_config,
+                                safety_settings=safety_settings)
+    
+
+setGemini()
+
+def sendVals(speed):
+    # Define the value you want to write to the file
+    value_to_write = str(speed)
+    
+    # Define the file path where you want to write the value
+    file_path = "arduino_command.txt"
+    
+    # Check if the file exists, if not, create it
+    if not os.path.exists(file_path):
+        with open(file_path, 'w') as file:
+            file.write(value_to_write)
+    else:
+        # If the file exists, append the value to the end of the file
+        with open(file_path, 'a') as file:
+            file.write(value_to_write + '\n')
+    
+    # print(f"Value '{value_to_write}' written to {file_path}")
 
 @app.route('/')
 def process():
+    return render_template("index.html")
+
+
+@app.route('/predictimage', methods = ["POST"])
+def process_image():
     
-    return processSpeech()
+    if request.method == 'POST':
+        data = request.json
+        imgData = data.get("imageData","")
 
+    decoded_image = io.BytesIO(base64.b64decode(imgData))
+    img = Image.open(decoded_image)
 
-@app.route('/predict')
+    # imgPath = "./image.jpg"
+    # img.save(imgPath)
+    
+    prompt = ['''how many fingers are being held up? Count based on total number of fingers fully stretched out. 
+              If there are 0 fingers stretched out then 0, 1 finger out means 1, 2 fingers out means 2, 3 out means 3, 
+              4 out means 4, 5 out means 5. If there are no hands in the image then 0.
+              Give me the answer as a single number''',img]
+
+    responseGen = modelVision.generate_content(prompt)
+    # time.sleep(5)
+    # os.remove('./image.jpg')
+    value = responseGen.text
+    sendVals(value)
+    os.system('python fan.py')
+    return jsonify({"repsonse":int(responseGen.text.lstrip().rstrip())}),200
+
+    #here i will send the response to the arduino as a request and also try and render the response on the frontend
+        
+@app.route('/predictaudio',methods=['POST'])
 def predict():
-    #this will call processSpeech/Image() based on image or speech
-    api_url = "something"
-    #here i will either capture image or detect speech
+    if request.method == 'POST':
+        data = request.json
+        audioData = data.get("audioPath","")
+        if audioData != "":
+            pass
+        else:
+            return jsonify({"error:","Please enter valid audio"}),404
 
-def processImage():
-    #i will send prompt and receive response  -> train a model, pickle load the model.pkl
-    pass
-'''
-def processSpeech():
-    final = ""
+    return processSpeech(audioData)
 
+def processSpeech(audioData):
+    
     clientSpeech = speech.SpeechClient.from_service_account_file('key.json')
-
-    numbers_file  = "./sample/speed_1.mp3"
-    
-    with open(numbers_file,'rb') as file:
+    inputAudio = audioData
+    decoded_content = base64.b64decode(inputAudio)
+    print(decoded_content)
+    with open('./decodedAudio.webm','wb') as audioFile:
+        audioFile.write(decoded_content)
+    # with open(inputAudio,'rb') as file:
+    #     data = file.read()
+    os.system('ffmpeg -i ./decodedAudio.webm ./audio.mp3')
+    with open('./audio.mp3','rb') as file:
         data = file.read()
-    
-    audio_file = speech.RecognitionAudio(content =data)
 
-    config = speech.RecognitionConfig(sample_rate_hertz = 44100,
-                                     enable_automatic_punctuation = True,
-                                     language_code = 'en-US',
-                                     profanity_filter=False)
-    
-    response_US  = clientSpeech.recognize(config = config,audio=audio_file)
-    
-    config = speech.RecognitionConfig(sample_rate_hertz = 44100,
-                                     enable_automatic_punctuation = True,
-                                     language_code = 'en-UK',
-                                     profanity_filter=False)
-    
-    response_UK = clientSpeech.recognize(config=config,audio=audio_file)
-
-    config = speech.RecognitionConfig(sample_rate_hertz = 44100,
-                                     enable_automatic_punctuation = True,
-                                     language_code = 'en-IN',
-                                     profanity_filter=False)
-    
-    response_IN = clientSpeech.recognize(config=config,audio=audio_file)
-
-    for res in response_IN.results:
-        res+=res.alternatives[0].transcript
-
-    cmd = getCommand(response_UK,response_US,response_IN)
-
-    return cmd
-
-def getCommand(final1,final2,final3):
-    final1 = list(final1.split())
-    final2 = list(final2.split())
-    final3 = list(final3.split())
-    speed = None
-    
-    msg1= cmdHelper(final1)
-    msg2= cmdHelper(final2)
-    msg3= cmdHelper(final3)
-    
-    return list(msg1,msg2,msg3)
-
-def cmdHelper(final):
-    msg = []
-    for i in msg:
-        if i.upper() in ["FAN", "STATUS", "SPEED", "ON", "OFF"]:
-            msg.append(i)
-        elif i.isnumeric():
-            speed = int(i)
-            msg.append(speed)
-
-    return msg
-'''
-
-def processSpeech():
-    clientSpeech = speech.SpeechClient.from_service_account_file('key.json')
-    numbers_file = "./sample/ljiv5.mp3"
-    
-    with open(numbers_file,'rb') as file:
-        data = file.read()
+    os.remove('./decodedAudio.webm')
+    os.remove('./audio.mp3')
     
     audio_file = speech.RecognitionAudio(content=data)
 
@@ -130,34 +187,25 @@ def processSpeech():
     transcript_IN = response_IN.results[0].alternatives[0].transcript if response_IN.results else ""
 
     # Split transcripts into lists of words
-    transcripts = [transcript_IN.split(), transcript_US.split(), transcript_UK.split()]
+    transcripts = [transcript_IN, transcript_US, transcript_UK]
 
-    command = getCmd(transcripts)
-    
-    return command
+    responseGen = modelText.generate_content(f''' {transcript_IN};{transcript_UK};{transcript_US}: which of these three sentences corresponds to a fan and its speed, if neither do then return -1,\
+                                              else return the speed of the fan as a number.
+                                             examples: 
+                                             fan speed 1 : 1
+                                             fan speed 2 : 2
+                                             fan speed 3 : 3
+                                             fan speed 4 : 4
+                                             fan speed 5 : 5''')
+    value = int(responseGen.text)
+    print(value)
+    sendVals(value)
+    os.system('python fan.py')
+    return jsonify({"response":int(responseGen.text),
+                    "transcripts":transcripts}),200
 
-    # return transcripts
 
-def getCmd(transcripts):
-    nums = {"ONE":"1","TWO":"2","THREE":"3","FOUR":"4","FIVE":"5","ON":"on","OFF":"off"}
-    filtered_transcripts = list(filter(lambda i: len(i) == 3, transcripts))
-    # filtered_transcripts = list(filter(lambda i: i[0].upper() == 'FAN', filtered_transcripts)) does not detect the word fan for multiple audio so i ignored this
-    filtered_transcripts = list(filter(lambda i: (i[1].upper() == 'STATUS') or (i[1].upper() == 'SPEED' and (i[2].isnumeric() or i[2].upper() in ["ZERO","ONE","TWO","THREE","FOUR","FIVE"])), filtered_transcripts))
-    
-    # return filtered_transcripts
-
-    if len(filtered_transcripts[0]) == 3:
-        if filtered_transcripts[0][0].upper()!="FAN":
-            filtered_transcripts[0][0] = "fan"#for generation of the command
-        if filtered_transcripts[0][1].upper() == "SPEED":
-            if filtered_transcripts[0][2].isdigit():
-                return filtered_transcripts[0]
-            else:
-                filtered_transcripts[0][2] = nums[filtered_transcripts[0][2].upper()]
-                return filtered_transcripts[0]
-        elif filtered_transcripts[0][1].upper() == "STATUS":
-                return filtered_transcripts[0][:2]
-    return []
+    return transcripts
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True,host="0.0.0.0")
